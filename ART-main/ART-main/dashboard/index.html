@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Atomic Red Team SOC Dashboard — Run, track, and analyze MITRE ATT&CK attack simulations for EDR testing">
+    <title>ART SOC Dashboard — Atomic Red Team Attack Simulator</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>⚡</text></svg>">
+</head>
+<body>
+    <div class="app-container">
+
+        <!-- ═══ Header ═══════════════════════════════════════════════ -->
+        <header class="app-header" id="app-header">
+            <div class="app-logo">
+                <div class="app-logo-icon">⚡</div>
+                <div>
+                    <h1>ART SOC Dashboard</h1>
+                    <p>Atomic Red Team Attack Simulation Console</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="header-badge">
+                    <span class="dot"></span>
+                    <span id="session-host">No Session</span>
+                </div>
+                <div class="file-load-area">
+                    <label class="file-label" for="load-results-file">
+                        📂 Load Results
+                    </label>
+                    <input type="file" id="load-results-file" accept=".json">
+                </div>
+            </div>
+        </header>
+
+        <!-- ═══ Tab Navigation ═══════════════════════════════════════ -->
+        <nav class="tab-nav" id="tab-nav">
+            <button class="tab-btn active" data-tab="results" id="tab-btn-results">
+                <span class="tab-icon">📊</span>
+                Results
+            </button>
+            <button class="tab-btn" data-tab="techniques" id="tab-btn-techniques">
+                <span class="tab-icon">🎯</span>
+                Techniques
+            </button>
+            <button class="tab-btn" data-tab="launcher" id="tab-btn-launcher">
+                <span class="tab-icon">🚀</span>
+                Launcher
+            </button>
+            <button class="tab-btn" data-tab="heatmap" id="tab-btn-heatmap">
+                <span class="tab-icon">🗺️</span>
+                ATT&CK Map
+            </button>
+        </nav>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 1: RESULTS
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-content active" id="tab-results">
+
+            <!-- Stats Grid -->
+            <div class="stats-grid" id="stats-grid">
+                <div class="stat-card total">
+                    <div class="stat-header">
+                        <span class="stat-label">Total Tests</span>
+                        <span class="stat-icon">🧪</span>
+                    </div>
+                    <div class="stat-value" id="stat-total">0</div>
+                    <div class="stat-sub" id="stat-techniques-count">0 techniques</div>
+                </div>
+                <div class="stat-card success">
+                    <div class="stat-header">
+                        <span class="stat-label">Passed</span>
+                        <span class="stat-icon">✅</span>
+                    </div>
+                    <div class="stat-value" id="stat-passed">0</div>
+                    <div class="stat-sub">attacks executed</div>
+                </div>
+                <div class="stat-card failed">
+                    <div class="stat-header">
+                        <span class="stat-label">Failed</span>
+                        <span class="stat-icon">❌</span>
+                    </div>
+                    <div class="stat-value" id="stat-failed">0</div>
+                    <div class="stat-sub">blocked / errored</div>
+                </div>
+                <div class="stat-card rate">
+                    <div class="stat-header">
+                        <span class="stat-label">Success Rate</span>
+                        <span class="stat-icon">📈</span>
+                    </div>
+                    <div class="stat-value" id="stat-rate">0%</div>
+                    <div class="stat-sub">attack execution rate</div>
+                </div>
+                <div class="stat-card duration">
+                    <div class="stat-header">
+                        <span class="stat-label">Duration</span>
+                        <span class="stat-icon">⏱️</span>
+                    </div>
+                    <div class="stat-value" id="stat-duration">0m</div>
+                    <div class="stat-sub">total session time</div>
+                </div>
+                <div class="stat-card skipped">
+                    <div class="stat-header">
+                        <span class="stat-label">Skipped</span>
+                        <span class="stat-icon">⏭️</span>
+                    </div>
+                    <div class="stat-value" id="stat-skipped">0</div>
+                    <div class="stat-sub">prereqs / platform</div>
+                </div>
+            </div>
+
+            <!-- Session Info -->
+            <div class="session-bar" id="session-bar" style="display:none;">
+                <div class="session-item">
+                    <span class="label">Session:</span>
+                    <span class="value" id="session-id">—</span>
+                </div>
+                <div class="session-item">
+                    <span class="label">Host:</span>
+                    <span class="value" id="session-hostname">—</span>
+                </div>
+                <div class="session-item">
+                    <span class="label">User:</span>
+                    <span class="value" id="session-username">—</span>
+                </div>
+                <div class="session-item">
+                    <span class="label">Start:</span>
+                    <span class="value" id="session-start">—</span>
+                </div>
+                <div class="session-item">
+                    <span class="label">End:</span>
+                    <span class="value" id="session-end">—</span>
+                </div>
+            </div>
+
+            <!-- Filters + Results Table -->
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">
+                        <span class="icon">📋</span>
+                        Attack Results
+                        <span class="count-badge" id="results-count">0</span>
+                    </h2>
+                    <div class="filter-bar">
+                        <div class="search-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" class="filter-input" id="filter-search" placeholder="Search technique, test name, command...">
+                        </div>
+                        <select class="filter-select" id="filter-status">
+                            <option value="all">All Status</option>
+                            <option value="Success">✅ Success</option>
+                            <option value="Failed">❌ Failed</option>
+                        </select>
+                        <select class="filter-select" id="filter-tactic">
+                            <option value="all">All Tactics</option>
+                        </select>
+                        <select class="filter-select" id="filter-cleanup">
+                            <option value="all">All Cleanup</option>
+                            <option value="Success">✅ Cleaned</option>
+                            <option value="Failed">❌ Cleanup Failed</option>
+                            <option value="No Cleanup Defined">⚪ No Cleanup</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="results-table-wrapper">
+                    <table class="results-table" id="results-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="TechniqueID">ID ↕</th>
+                                <th data-sort="TechniqueName">Technique ↕</th>
+                                <th data-sort="Tactic">Tactic ↕</th>
+                                <th data-sort="TestName">Test Name ↕</th>
+                                <th data-sort="StartTime">Start Time ↕</th>
+                                <th data-sort="Duration">Duration ↕</th>
+                                <th data-sort="Status">Status ↕</th>
+                                <th data-sort="CleanupStatus">Cleanup ↕</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty-state" id="results-empty">
+                    <div class="empty-icon">📊</div>
+                    <h3>No Results Loaded</h3>
+                    <p>Load a results JSON file using the "Load Results" button, or run attacks first using the PowerShell scripts.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 2: TECHNIQUE BROWSER
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-techniques">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">
+                        <span class="icon">🎯</span>
+                        Available Techniques
+                        <span class="count-badge" id="techniques-count">0</span>
+                    </h2>
+                    <div class="filter-bar">
+                        <div class="search-wrapper">
+                            <span class="search-icon">🔍</span>
+                            <input type="text" class="filter-input" id="tech-search" placeholder="Search techniques...">
+                        </div>
+                        <select class="filter-select" id="tech-tactic-filter">
+                            <option value="all">All Tactics</option>
+                        </select>
+                        <select class="filter-select" id="tech-platform-filter">
+                            <option value="all">All Platforms</option>
+                            <option value="windows">Windows</option>
+                            <option value="linux">Linux</option>
+                            <option value="macos">macOS</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="technique-grid" id="technique-grid">
+                    </div>
+                    <div class="empty-state" id="techniques-empty">
+                        <div class="empty-icon">🎯</div>
+                        <h3>No Techniques Loaded</h3>
+                        <p>Run <code>Get-ARTTechniques.ps1</code> on your VM to build the technique catalog, then load the JSON here.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 3: ATTACK LAUNCHER
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-launcher">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">
+                        <span class="icon">🚀</span>
+                        Attack Launcher — Command Generator
+                    </h2>
+                </div>
+                <div class="panel-body">
+                    <p style="color: var(--text-secondary); margin-bottom: 16px; font-size: 0.9rem;">
+                        Configure your attack parameters below. Select techniques from the Techniques tab or enter IDs manually. 
+                        The generated PowerShell command can be copied and run on your target VM.
+                    </p>
+
+                    <!-- Config -->
+                    <div class="config-panel" id="launcher-config">
+                        <div class="config-group">
+                            <label for="launcher-techniques">Technique IDs (comma-separated)</label>
+                            <input type="text" id="launcher-techniques" placeholder="T1016,T1059.001,T1003" value="">
+                        </div>
+                        <div class="config-group">
+                            <label for="launcher-tactic">— OR — Run by Tactic</label>
+                            <select id="launcher-tactic">
+                                <option value="">Select tactic...</option>
+                                <option value="Reconnaissance">Reconnaissance</option>
+                                <option value="Resource Development">Resource Development</option>
+                                <option value="Initial Access">Initial Access</option>
+                                <option value="Execution">Execution</option>
+                                <option value="Persistence">Persistence</option>
+                                <option value="Privilege Escalation">Privilege Escalation</option>
+                                <option value="Defense Evasion">Defense Evasion</option>
+                                <option value="Credential Access">Credential Access</option>
+                                <option value="Discovery">Discovery</option>
+                                <option value="Lateral Movement">Lateral Movement</option>
+                                <option value="Collection">Collection</option>
+                                <option value="Command and Control">Command and Control</option>
+                                <option value="Exfiltration">Exfiltration</option>
+                                <option value="Impact">Impact</option>
+                            </select>
+                        </div>
+                        <div class="config-group">
+                            <label for="launcher-delay">Delay Between Tests (seconds)</label>
+                            <input type="number" id="launcher-delay" value="30" min="0" max="300">
+                        </div>
+                        <div class="config-group">
+                            <label>Auto Cleanup</label>
+                            <div class="toggle-wrapper">
+                                <div class="toggle active" id="toggle-cleanup" data-value="true"></div>
+                                <span style="font-size:0.85rem; color:var(--text-secondary);" id="cleanup-label">Enabled</span>
+                            </div>
+                        </div>
+                        <div class="config-group">
+                            <label>Skip Prereq Check</label>
+                            <div class="toggle-wrapper">
+                                <div class="toggle" id="toggle-prereqs" data-value="false"></div>
+                                <span style="font-size:0.85rem; color:var(--text-secondary);" id="prereqs-label">Disabled</span>
+                            </div>
+                        </div>
+                        <div class="config-group">
+                            <label>Export Excel Report</label>
+                            <div class="toggle-wrapper">
+                                <div class="toggle active" id="toggle-excel" data-value="true"></div>
+                                <span style="font-size:0.85rem; color:var(--text-secondary);" id="excel-label">Enabled</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Selected techniques from browser -->
+                    <div style="margin-bottom: 16px;" id="selected-techniques-display">
+                        <span style="font-size: 0.82rem; color: var(--text-muted);">Selected from browser: </span>
+                        <span id="selected-techniques-list" style="font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--text-accent);">None</span>
+                    </div>
+
+                    <!-- Generate button -->
+                    <button class="btn btn-primary" id="btn-generate-command" style="margin-bottom: 16px;">
+                        ⚡ Generate PowerShell Command
+                    </button>
+
+                    <!-- Command output -->
+                    <div class="command-output" id="command-output" style="display:none;">
+                        <button class="copy-btn" id="btn-copy-command">📋 Copy</button>
+                        <pre id="generated-command"></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══════════════════════════════════════════════════════════
+             TAB 4: MITRE ATT&CK HEAT MAP
+        ═══════════════════════════════════════════════════════════ -->
+        <div class="tab-content" id="tab-heatmap">
+            <div class="panel">
+                <div class="panel-header">
+                    <h2 class="panel-title">
+                        <span class="icon">🗺️</span>
+                        MITRE ATT&CK Coverage Heat Map
+                    </h2>
+                    <div class="legend">
+                        <div class="legend-item">
+                            <div class="legend-swatch pass"></div>
+                            All Passed
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-swatch fail"></div>
+                            All Failed
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-swatch mixed"></div>
+                            Mixed
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-swatch untested"></div>
+                            Untested
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-body">
+                    <div class="heatmap-container">
+                        <div class="heatmap-grid" id="heatmap-grid">
+                        </div>
+                    </div>
+                    <div class="empty-state" id="heatmap-empty">
+                        <div class="empty-icon">🗺️</div>
+                        <h3>No Data for Heat Map</h3>
+                        <p>Load results and technique catalog to visualize MITRE ATT&CK coverage.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
