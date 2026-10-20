@@ -634,6 +634,15 @@ foreach ($technique in $techniques) {
             else {
                 Write-Host "      [OK] Attack executed" -ForegroundColor Green
             }
+            if ($commandOutput) {
+                $outLines = ($commandOutput -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+                foreach ($line in ($outLines | Select-Object -First 5)) {
+                    Write-Host "        > $line" -ForegroundColor DarkGray
+                }
+                if ($outLines.Count -gt 5) {
+                    Write-Host "        > ... ($($outLines.Count - 5) more output lines recorded)" -ForegroundColor DarkGray
+                }
+            }
         }
         elseif ($status -eq "Success") {
             Write-Host "      [OK] Attack executed" -ForegroundColor Green
