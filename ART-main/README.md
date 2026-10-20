@@ -38,14 +38,31 @@ ART/
 
 ---
 
-## 🚀 Quick Start
+## ⚡ 1-Click Execution (For Clients & Automated Assessments)
+
+If you are handing this tool over to a client or non-technical operator:
+
+1. Clone or download the repository.
+2. Double-click **`RUN_SIMULATION.bat`** in the project folder.
+
+**Everything runs automatically:**
+- Auto-elevates as Administrator.
+- Auto-installs missing dependencies (`powershell-yaml`, `ImportExcel`).
+- Auto-downloads the `atomics` folder from GitHub if not already present.
+- Executes tests defined in **`test_plan.json`**.
+- Saves a **single unified Excel report (`ART_Results.xlsx`)** and JSON report in the **`results\`** folder.
+- Automatically opens the `results\` folder upon completion.
+
+---
+
+## 🚀 Advanced / Manual PowerShell Execution
 
 ### Step 1: Install Dependencies (One-time)
 
 Run on the target VM as Administrator:
 
 ```powershell
-cd C:\path\to\ART\scripts
+cd .\scripts
 .\Install-ARTDependencies.ps1
 ```
 
@@ -175,7 +192,8 @@ Features:
 | `-SkipPrereqCheck` | Switch | `$false` | Skip prerequisite validation |
 | `-ExportExcel` | Bool | `$true` | Auto-generate Excel report |
 | `-OutputDir` | String | `..\results` | Output directory |
-| `-AtomicsPath` | String | `C:\AtomicRedTeam\atomics` | Path to atomics folder |
+| `-AtomicsPath` | String | Auto-detected | Path to atomics folder (checks project root, env vars, etc.) |
+| `-ARTModulePath` | String | Auto-detected | Path to invoke-atomicredteam module folder |
 
 ---
 

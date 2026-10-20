@@ -118,7 +118,7 @@ function Install-AtomicsFolder {
                 $zip.Dispose()
             }
             else {
-                Invoke-WebRequest $url -OutFile $path
+                Invoke-WebRequest $url -OutFile $path -UseBasicParsing
 
                 write-verbose "Extracting ART to $InstallPath"
                 $zipDest = Join-Path "$DownloadPath" "tmp"

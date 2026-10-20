@@ -1,0 +1,21 @@
+{
+  "Description": "Atomic Red Team - Security Assessment Execution Plan",
+  "AutoCleanup": true,
+  "DelayBetweenTests": 10,
+  "SkipPrereqCheck": false,
+  "Tests": {
+    "T1059.003": [
+      1,
+      2,
+      3
+    ],
+    "T1059.005": [
+      1,
+      3
+    ],
+    "T1059.007": [
+      1,
+      2
+    ]
+  }
+}

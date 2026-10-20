@@ -37,7 +37,7 @@
     Output directory for results. Default: ..\results
 
 .PARAMETER AtomicsPath
-    Path to the atomics folder. Default: C:\AtomicRedTeam\atomics
+    Path to the atomics folder. Default: Auto-detected (e.g. ..\..\atomics or C:\AtomicRedTeam\atomics)
 
 .PARAMETER SkipPrereqCheck
     Skip prerequisite validation before running tests
@@ -46,7 +46,7 @@
     Automatically export results to Excel in real-time (default: true)
 
 .PARAMETER ARTModulePath
-    Path to invoke-atomicredteam module. Default: C:\AtomicRedTeam\invoke-atomicredteam
+    Path to invoke-atomicredteam module. Default: Auto-detected (e.g. ..\..\invoke-atomicredteam or C:\AtomicRedTeam\invoke-atomicredteam)
 
 .EXAMPLE
     # Run specific techniques
@@ -76,6 +76,12 @@ param(
     [Parameter(ParameterSetName = "RunAll", Mandatory = $true)]
     [switch]$RunAll,
 
+    [Parameter(ParameterSetName = "PlanFile")]
+    [string]$TestPlanFile,
+
+    [Parameter(ParameterSetName = "PlanObject")]
+    [hashtable]$TestPlan,
+
     [Parameter()]
     [int[]]$TestNumbers,
 
@@ -89,7 +95,7 @@ param(
     [string]$OutputDir = (Join-Path $PSScriptRoot "..\results"),
 
     [Parameter()]
-    [string]$AtomicsPath = "C:\AtomicRedTeam\atomics",
+    [string]$AtomicsPath = "",
 
     [Parameter()]
     [switch]$SkipPrereqCheck,
@@ -98,10 +104,65 @@ param(
     [bool]$ExportExcel = $true,
 
     [Parameter()]
-    [string]$ARTModulePath = "C:\AtomicRedTeam\invoke-atomicredteam"
+    [string]$ARTModulePath = ""
 )
 
 $ErrorActionPreference = "Continue"
+
+# -- Resolve Paths Dynamically -----------------------------------------------
+# 1. Resolve ARTModulePath
+if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
+    $moduleCandidates = @(
+        $env:ARTModulePath,
+        (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
+        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+        "C:\AtomicRedTeam\invoke-atomicredteam"
+    )
+    foreach ($cand in $moduleCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
+            $ARTModulePath = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
+        $ARTModulePath = (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam")
+    }
+} elseif (Test-Path $ARTModulePath) {
+    $ARTModulePath = (Resolve-Path $ARTModulePath).Path
+}
+
+# 2. Resolve AtomicsPath
+if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
+    $atomicsCandidates = @(
+        $env:PathToAtomicsFolder,
+        (Join-Path $PSScriptRoot "..\..\atomics"),
+        (Join-Path $PSScriptRoot "..\atomics"),
+        (Join-Path $PSScriptRoot "atomics"),
+        (Join-Path $PSScriptRoot "..\..\..\atomics"),
+        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
+        (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics"),
+        "C:\AtomicRedTeam\atomics"
+    )
+    foreach ($cand in $atomicsCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
+            $AtomicsPath = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
+        $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        if ($projectRoot -and (Test-Path $projectRoot)) {
+            $AtomicsPath = Join-Path $projectRoot "atomics"
+        } else {
+            $AtomicsPath = Join-Path $PSScriptRoot "..\..\atomics"
+        }
+    }
+} elseif (Test-Path $AtomicsPath) {
+    $AtomicsPath = (Resolve-Path $AtomicsPath).Path
+}
 
 # -- Import Required Modules ------------------------------------------------
 if (Test-Path $ARTModulePath) {
@@ -110,6 +171,23 @@ if (Test-Path $ARTModulePath) {
     Import-Module invoke-atomicredteam -Force -ErrorAction Stop
 }
 
+# Ensure invoke-atomicredteam resolves the correct atomics folder:
+$env:PathToAtomicsFolder = $AtomicsPath
+$PathToAtomicsFolder = $AtomicsPath
+$global:PathToAtomicsFolder = $AtomicsPath
+$PSDefaultParameterValues["Invoke-AtomicTest:PathToAtomicsFolder"] = $AtomicsPath
+$PSDefaultParameterValues["Get-AtomicTechnique:PathToAtomicsFolder"] = $AtomicsPath
+
+# Validate AtomicsPath exists before running attacks
+if (-not (Test-Path $AtomicsPath)) {
+    Write-Host ""
+    Write-Host "  [ERROR] Atomics folder not found at: $AtomicsPath" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Please specify the atomics folder location using -AtomicsPath, or run:" -ForegroundColor Yellow
+    Write-Host "    .\Install-ARTDependencies.ps1 -DownloadAtomics" -ForegroundColor White
+    Write-Host ""
+    return
+}
 # -- Banner ------------------------------------------------------------------
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor Red
@@ -151,8 +229,37 @@ function Get-TacticForTechnique($TechniqueId) {
 
 # -- Parse Techniques --------------------------------------------------------
 $techniquesToRun = @()
+$planTestMap = @{}
 
-if ($RunAll) {
+if ($TestPlanFile -or $TestPlan) {
+    if ($TestPlanFile) {
+        if (-not (Test-Path $TestPlanFile)) {
+            Write-Error "Test plan file not found at: $TestPlanFile"
+            exit 1
+        }
+        $rawPlan = Get-Content $TestPlanFile -Raw | ConvertFrom-Json
+        $testsObj = if ($rawPlan.Tests) { $rawPlan.Tests } else { $rawPlan }
+        foreach ($prop in $testsObj.PSObject.Properties) {
+            $planTestMap[$prop.Name] = @($prop.Value)
+        }
+        if ($rawPlan.DelayBetweenTests -and -not $PSBoundParameters.ContainsKey('DelayBetweenTests')) {
+            $DelayBetweenTests = [int]$rawPlan.DelayBetweenTests
+        }
+        if ($rawPlan.AutoCleanup -ne $null -and -not $PSBoundParameters.ContainsKey('AutoCleanup')) {
+            $AutoCleanup = [bool]$rawPlan.AutoCleanup
+        }
+        if ($rawPlan.SkipPrereqCheck -ne $null -and -not $PSBoundParameters.ContainsKey('SkipPrereqCheck')) {
+            $SkipPrereqCheck = [bool]$rawPlan.SkipPrereqCheck
+        }
+    } elseif ($TestPlan) {
+        foreach ($k in $TestPlan.Keys) {
+            $planTestMap[$k] = @($TestPlan[$k])
+        }
+    }
+    $techniquesToRun = @($planTestMap.Keys)
+    Write-Host "  [i] Test Plan loaded: $($techniquesToRun.Count) technique(s)" -ForegroundColor Cyan
+}
+elseif ($RunAll) {
     Write-Host "  [!] Running ALL available techniques" -ForegroundColor Yellow
     $allDirs = Get-ChildItem -Path $AtomicsPath -Directory | Where-Object { $_.Name -match "^T\d+" }
     $techniquesToRun = $allDirs.Name
@@ -315,13 +422,20 @@ foreach ($technique in $techniques) {
     # Determine which tests to run
     $testsToRun = $technique.atomic_tests
 
-    # FIX Bug #4: $TestNumbers is int[] — only compare against numeric test index
-    if ($TestNumbers) {
+    # Check if specific test numbers are requested (via test plan or parameter)
+    $specificNumbers = $null
+    if ($planTestMap.ContainsKey($techniqueId)) {
+        $specificNumbers = $planTestMap[$techniqueId]
+    } elseif ($TestNumbers) {
+        $specificNumbers = $TestNumbers
+    }
+
+    if ($specificNumbers -and $specificNumbers.Count -gt 0) {
         $testsToRun = @()
         $idx = 0
         foreach ($t in $technique.atomic_tests) {
             $idx++
-            if ($TestNumbers -contains $idx) {
+            if ($specificNumbers -contains $idx) {
                 $testsToRun += $t
             }
         }
@@ -638,7 +752,13 @@ $sessionData = @{
 }
 
 # -- Save JSON Results -------------------------------------------------------
+$unifiedJsonPath = Join-Path $OutputDir "ART_Results.json"
+
+# Save session timestamped JSON
 $sessionData | ConvertTo-Json -Depth 10 | Out-File -FilePath $jsonResultsPath -Encoding UTF8 -Force
+
+# Save unified single JSON
+$sessionData | ConvertTo-Json -Depth 10 | Out-File -FilePath $unifiedJsonPath -Encoding UTF8 -Force
 
 # Also copy to dashboard data folder
 $sessionData | ConvertTo-Json -Depth 10 | Out-File -FilePath $dashboardResultsPath -Encoding UTF8 -Force
@@ -656,10 +776,10 @@ Write-Host "    Skipped:       $skippedTests" -ForegroundColor DarkYellow
 Write-Host "    Duration:      $([math]::Round($sessionDuration, 2)) minutes" -ForegroundColor Gray
 Write-Host "    Success Rate:  $($sessionData.SessionInfo.SuccessRate)%" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Results saved to:" -ForegroundColor White
-Write-Host "    JSON:  $jsonResultsPath" -ForegroundColor Gray
-Write-Host "    Dashboard: $dashboardResultsPath" -ForegroundColor Gray
+Write-Host "  Unified Results in results folder:" -ForegroundColor White
 if ($excelReady) {
-    Write-Host "    Excel: $excelPath (real-time, $($allResults.Count) rows)" -ForegroundColor Gray
+    Write-Host "    Excel Report: $excelPath ($($allResults.Count) tests)" -ForegroundColor Green
 }
+Write-Host "    JSON Report:  $unifiedJsonPath" -ForegroundColor Green
+Write-Host "    Dashboard:    $dashboardResultsPath" -ForegroundColor Gray
 Write-Host ""

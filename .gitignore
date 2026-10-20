@@ -1,0 +1,13 @@
+# Temporary files and archives
+*.zip
+*.tmp
+*.log
+*ART_transcript_*.txt
+
+# Atomics library (downloaded on-demand automatically)
+atomics/
+
+# OS metadata
+Thumbs.db
+Desktop.ini
+.DS_Store

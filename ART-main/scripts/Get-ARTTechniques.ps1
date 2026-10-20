@@ -8,7 +8,7 @@
     This catalog is consumed by the SOC dashboard for technique browsing.
 
 .PARAMETER AtomicsPath
-    Path to the atomics folder. Default: C:\AtomicRedTeam\atomics
+    Path to the atomics folder. Default: Auto-detected (e.g. ..\..\atomics or C:\AtomicRedTeam\atomics)
 
 .PARAMETER OutputPath
     Path for the output JSON file. Default: ..\dashboard\data\techniques.json
@@ -21,21 +21,76 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$AtomicsPath = "C:\AtomicRedTeam\atomics",
+    [string]$AtomicsPath = "",
 
     [Parameter()]
     [string]$OutputPath = (Join-Path $PSScriptRoot "..\dashboard\data\techniques.json"),
 
     [Parameter()]
-    [string]$ARTModulePath = "C:\AtomicRedTeam\invoke-atomicredteam"
+    [string]$ARTModulePath = ""
 )
 
 $ErrorActionPreference = "Stop"
 
+# -- Resolve Paths Dynamically -----------------------------------------------
+# 1. Resolve ARTModulePath
+if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
+    $moduleCandidates = @(
+        $env:ARTModulePath,
+        (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
+        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+        "C:\AtomicRedTeam\invoke-atomicredteam"
+    )
+    foreach ($cand in $moduleCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
+            $ARTModulePath = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
+        $ARTModulePath = (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam")
+    }
+} elseif (Test-Path $ARTModulePath) {
+    $ARTModulePath = (Resolve-Path $ARTModulePath).Path
+}
+
+# 2. Resolve AtomicsPath
+if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
+    $atomicsCandidates = @(
+        $env:PathToAtomicsFolder,
+        (Join-Path $PSScriptRoot "..\..\atomics"),
+        (Join-Path $PSScriptRoot "..\atomics"),
+        (Join-Path $PSScriptRoot "atomics"),
+        (Join-Path $PSScriptRoot "..\..\..\atomics"),
+        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
+        (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics"),
+        "C:\AtomicRedTeam\atomics"
+    )
+    foreach ($cand in $atomicsCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
+            $AtomicsPath = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
+        $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        if ($projectRoot -and (Test-Path $projectRoot)) {
+            $AtomicsPath = Join-Path $projectRoot "atomics"
+        } else {
+            $AtomicsPath = Join-Path $PSScriptRoot "..\..\atomics"
+        }
+    }
+} elseif (Test-Path $AtomicsPath) {
+    $AtomicsPath = (Resolve-Path $AtomicsPath).Path
+}
+
 Write-Host ""
-    Write-Host "  ============================================================" -ForegroundColor Cyan
-    Write-Host "  |        ART Technique Catalog Builder                    |" -ForegroundColor Cyan
-    Write-Host "  ============================================================" -ForegroundColor Cyan
+Write-Host "  ============================================================" -ForegroundColor Cyan
+Write-Host "  |        ART Technique Catalog Builder                    |" -ForegroundColor Cyan
+Write-Host "  ============================================================" -ForegroundColor Cyan
 Write-Host ""
 
 # Import ART module
@@ -44,6 +99,13 @@ if (Test-Path $ARTModulePath) {
 } else {
     Import-Module invoke-atomicredteam -Force -ErrorAction Stop
 }
+
+# Ensure invoke-atomicredteam resolves the correct atomics folder:
+$env:PathToAtomicsFolder = $AtomicsPath
+$PathToAtomicsFolder = $AtomicsPath
+$global:PathToAtomicsFolder = $AtomicsPath
+$PSDefaultParameterValues["Invoke-AtomicTest:PathToAtomicsFolder"] = $AtomicsPath
+$PSDefaultParameterValues["Get-AtomicTechnique:PathToAtomicsFolder"] = $AtomicsPath
 
 # Ensure output directory exists
 $outputDir = Split-Path $OutputPath -Parent
@@ -85,6 +147,16 @@ function Get-TacticForTechnique {
     
     if ($tactics.Count -eq 0) { return "Unknown" }
     return ($tactics -join ", ")
+}
+
+if (-not (Test-Path $AtomicsPath)) {
+    Write-Host ""
+    Write-Host "  [ERROR] Atomics folder not found at: $AtomicsPath" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "  Please specify the atomics folder location using -AtomicsPath, or run:" -ForegroundColor Yellow
+    Write-Host "    .\Install-ARTDependencies.ps1 -DownloadAtomics" -ForegroundColor White
+    Write-Host ""
+    exit 1
 }
 
 Write-Host "  Scanning atomics folder: $AtomicsPath" -ForegroundColor Gray

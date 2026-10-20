@@ -10,10 +10,13 @@
     - Validates everything is ready to run
 
 .PARAMETER AtomicsPath
-    Path to the atomics folder. Default: C:\AtomicRedTeam\atomics
+    Path to the atomics folder. Default: Auto-detected (e.g. ..\..\atomics or C:\AtomicRedTeam\atomics)
 
 .PARAMETER ARTModulePath
-    Path to the invoke-atomicredteam module folder. Default: C:\AtomicRedTeam\invoke-atomicredteam
+    Path to the invoke-atomicredteam module folder. Default: Auto-detected (e.g. ..\..\invoke-atomicredteam or C:\AtomicRedTeam\invoke-atomicredteam)
+
+.PARAMETER DownloadAtomics
+    Switch to automatically download and extract the atomics folder from GitHub.
 
 .NOTES
     Run as Administrator on the target VM.
@@ -23,13 +26,77 @@
 [CmdletBinding()]
 param(
     [Parameter()]
-    [string]$AtomicsPath = "C:\AtomicRedTeam\atomics",
+    [string]$AtomicsPath = "",
 
     [Parameter()]
-    [string]$ARTModulePath = "C:\AtomicRedTeam\invoke-atomicredteam"
+    [string]$ARTModulePath = "",
+
+    [Parameter()]
+    [switch]$DownloadAtomics
 )
 
 $ErrorActionPreference = "Stop"
+
+# -- Resolve Paths Dynamically -----------------------------------------------
+# 1. Resolve ARTModulePath
+if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
+    $moduleCandidates = @(
+        $env:ARTModulePath,
+        (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "invoke-atomicredteam"),
+        (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
+        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+        "C:\AtomicRedTeam\invoke-atomicredteam"
+    )
+    foreach ($cand in $moduleCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
+            $ARTModulePath = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
+        $ARTModulePath = (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam")
+    }
+} elseif (Test-Path $ARTModulePath) {
+    $ARTModulePath = (Resolve-Path $ARTModulePath).Path
+}
+
+# 2. Resolve AtomicsPath
+if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
+    $atomicsCandidates = @(
+        $env:PathToAtomicsFolder,
+        (Join-Path $PSScriptRoot "..\..\atomics"),
+        (Join-Path $PSScriptRoot "..\atomics"),
+        (Join-Path $PSScriptRoot "atomics"),
+        (Join-Path $PSScriptRoot "..\..\..\atomics"),
+        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
+        (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics"),
+        "C:\AtomicRedTeam\atomics"
+    )
+    foreach ($cand in $atomicsCandidates) {
+        if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
+            $AtomicsPath = (Resolve-Path $cand).Path
+            break
+        }
+    }
+    if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
+        $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        if ($projectRoot -and (Test-Path $projectRoot)) {
+            $AtomicsPath = Join-Path $projectRoot "atomics"
+        } else {
+            $AtomicsPath = Join-Path $PSScriptRoot "..\..\atomics"
+        }
+    }
+} elseif (Test-Path $AtomicsPath) {
+    $AtomicsPath = (Resolve-Path $AtomicsPath).Path
+}
+
+# Set environment and session variables for invoke-atomicredteam
+$env:PathToAtomicsFolder = $AtomicsPath
+$PathToAtomicsFolder = $AtomicsPath
+$global:PathToAtomicsFolder = $AtomicsPath
+$PSDefaultParameterValues["Invoke-AtomicTest:PathToAtomicsFolder"] = $AtomicsPath
 
 # -- Banner ------------------------------------------------------------------
 Write-Host ""
@@ -65,13 +132,8 @@ if (-not (Test-Path $ARTModulePath)) {
     Write-Host ""
     Write-Host "  [ERROR] Module folder not found at: $ARTModulePath" -ForegroundColor Red
     Write-Host ""
-    Write-Host "  Please download Invoke-AtomicRedTeam first:" -ForegroundColor Yellow
-    Write-Host "    1. Go to https://github.com/redcanaryco/invoke-atomicredteam" -ForegroundColor Gray
-    Write-Host "    2. Click Code > Download ZIP" -ForegroundColor Gray
-    Write-Host "    3. Extract and copy the folder to: $ARTModulePath" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  Or specify a custom path:" -ForegroundColor Yellow
-    Write-Host "    .\Install-ARTDependencies.ps1 -ARTModulePath 'D:\path\to\invoke-atomicredteam'" -ForegroundColor Gray
+    Write-Host "  Please ensure invoke-atomicredteam is placed in your project or at: $ARTModulePath" -ForegroundColor Yellow
+    Write-Host "    Or specify custom path: .\Install-ARTDependencies.ps1 -ARTModulePath 'path\to\invoke-atomicredteam'" -ForegroundColor Gray
     Write-Host ""
     exit 1
 }
@@ -86,30 +148,51 @@ if (-not $yamlModule) {
     Write-Host "  [OK] powershell-yaml already installed (v$($yamlModule.Version))" -ForegroundColor Green
 }
 
-# Import the module from local path
+# Import the module from resolved local path
 Import-Module $ARTModulePath -Force
 Write-Host "  [OK] Invoke-AtomicRedTeam loaded from $ARTModulePath" -ForegroundColor Green
 
 # -- Step 4: Validate Atomics Folder -----------------------------------------
 Write-Host "[4/5] Checking atomics folder..." -ForegroundColor Yellow
 
-if (-not (Test-Path $AtomicsPath)) {
-    Write-Host ""
-    Write-Host "  [ERROR] Atomics folder not found at: $AtomicsPath" -ForegroundColor Red
-    Write-Host ""
-    Write-Host "  Please download the atomics:" -ForegroundColor Yellow
-    Write-Host "    1. Go to https://github.com/redcanaryco/atomic-red-team" -ForegroundColor Gray
-    Write-Host "    2. Click Code > Download ZIP" -ForegroundColor Gray
-    Write-Host "    3. Extract and copy the 'atomics' folder to: $AtomicsPath" -ForegroundColor Gray
-    Write-Host ""
-    Write-Host "  Or specify a custom path:" -ForegroundColor Yellow
-    Write-Host "    .\Install-ARTDependencies.ps1 -AtomicsPath 'D:\path\to\atomics'" -ForegroundColor Gray
-    Write-Host ""
-    exit 1
+if ($DownloadAtomics) {
+    Write-Host "  [-DownloadAtomics specified] Downloading atomics from GitHub..." -ForegroundColor Cyan
+    $installerScript = Join-Path $ARTModulePath "install-atomicsfolder.ps1"
+    if (Test-Path $installerScript) {
+        . $installerScript
+        $parentFolder = Split-Path $AtomicsPath -Parent
+        if (-not (Test-Path $parentFolder)) {
+            New-Item -Path $parentFolder -ItemType Directory -Force | Out-Null
+        }
+        Install-AtomicsFolder -InstallPath $parentFolder
+        if (Test-Path $AtomicsPath) {
+            Write-Host "  [OK] Successfully downloaded atomics folder to: $AtomicsPath" -ForegroundColor Green
+        }
+    } else {
+        Write-Host "  [WARN] Could not find installer script at: $installerScript" -ForegroundColor DarkYellow
+    }
 }
 
-$atomicCount = (Get-ChildItem -Path $AtomicsPath -Directory | Where-Object { $_.Name -match "^T\d+" }).Count
-Write-Host "  [OK] Found $atomicCount technique folders in $AtomicsPath" -ForegroundColor Green
+$atomicCount = 0
+if (-not (Test-Path $AtomicsPath)) {
+    Write-Host ""
+    Write-Host "  [WARN] Atomics folder not found at: $AtomicsPath" -ForegroundColor DarkYellow
+    Write-Host ""
+    Write-Host "  You can automatically download atomics using:" -ForegroundColor Yellow
+    Write-Host "    .\Install-ARTDependencies.ps1 -DownloadAtomics" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Or manually download:" -ForegroundColor Yellow
+    Write-Host "    1. Go to https://github.com/redcanaryco/atomic-red-team" -ForegroundColor Gray
+    Write-Host "    2. Click Code > Download ZIP" -ForegroundColor Gray
+    Write-Host "    3. Extract the 'atomics' folder to: $AtomicsPath" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Or pass a custom path when running attacks:" -ForegroundColor Yellow
+    Write-Host "    .\Invoke-ARTAutomation.ps1 -AtomicsPath 'D:\path\to\atomics'" -ForegroundColor Gray
+    Write-Host ""
+} else {
+    $atomicCount = (Get-ChildItem -Path $AtomicsPath -Directory | Where-Object { $_.Name -match "^T\d+" }).Count
+    Write-Host "  [OK] Found $atomicCount technique folders in $AtomicsPath" -ForegroundColor Green
+}
 
 # -- Step 5: Install ImportExcel Module --------------------------------------
 Write-Host "[5/5] Installing ImportExcel module..." -ForegroundColor Yellow
@@ -143,8 +226,12 @@ Write-Host "  ============================================================" -For
 Write-Host "  |              [OK] Setup Complete!                        |" -ForegroundColor Green
 Write-Host "  ============================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "  Module:  Invoke-AtomicRedTeam loaded" -ForegroundColor White
-Write-Host "  Atomics: $atomicCount techniques at $AtomicsPath" -ForegroundColor White
+Write-Host "  Module:  Invoke-AtomicRedTeam loaded from $ARTModulePath" -ForegroundColor White
+if (Test-Path $AtomicsPath) {
+    Write-Host "  Atomics: $atomicCount techniques at $AtomicsPath" -ForegroundColor White
+} else {
+    Write-Host "  Atomics: [Pending download] Path: $AtomicsPath" -ForegroundColor DarkYellow
+}
 Write-Host "  Excel:   ImportExcel ready" -ForegroundColor White
 Write-Host ""
 Write-Host "  Next Steps:" -ForegroundColor Yellow
