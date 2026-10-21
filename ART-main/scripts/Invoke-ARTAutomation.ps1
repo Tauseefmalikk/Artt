@@ -249,7 +249,7 @@ $currentUsername = if ($env:USERNAME) {
 
 # -- Parse Techniques --------------------------------------------------------
 $techniquesToRun = @()
-$planTestMap = @{}
+$planTestMap = [ordered]@{}
 
 if ($TestPlanFile -or $TestPlan) {
     if ($TestPlanFile) {
@@ -375,13 +375,16 @@ $techniques = @()
 foreach ($id in $techniquesToRun) {
     try {
         $yamlPath = Join-Path (Join-Path $AtomicsPath $id) "$id.yaml"
+        if (-not (Test-Path $yamlPath)) {
+            $yamlPath = Join-Path (Join-Path $AtomicsPath $id) "$id.yml"
+        }
         if (Test-Path $yamlPath) {
             $techObj = Get-AtomicTechnique -Path $yamlPath
             if ($techObj) {
                 $techniques += $techObj
             }
         } else {
-            Write-Warning "YAML not found for $id at $yamlPath"
+            Write-Warning "YAML definition not found for $id at $yamlPath"
         }
     }
     catch {
