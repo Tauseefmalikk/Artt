@@ -455,7 +455,7 @@ foreach ($technique in $techniques) {
 
     # Check if specific test numbers are requested (via test plan or parameter)
     $specificNumbers = $null
-    if ($planTestMap.ContainsKey($techniqueId)) {
+    if ($planTestMap -and $planTestMap.Contains($techniqueId)) {
         $specificNumbers = $planTestMap[$techniqueId]
     } elseif ($TestNumbers) {
         $specificNumbers = $TestNumbers
