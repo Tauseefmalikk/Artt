@@ -2,19 +2,30 @@
 
 ## ⚡ 1-Click Execution (For Clients / Non-Technical Users)
 
-Simply clone or unzip the repository, and **double-click** the batch file in the project folder:
-
+### On Windows:
+Double-click the batch file in the root project folder:
 ```text
 RUN_SIMULATION.bat
 ```
 
+### On macOS / Linux:
+Double-click the command file in Finder or run via terminal:
+```bash
+# Double-click in Finder:
+run_simulation.command
+
+# Or run in terminal:
+sudo ./run_simulation.sh
+```
+
 **Everything is 100% automated:**
-1. **Auto-Elevates**: Prompts standard Windows UAC prompt (click *Yes*).
+1. **Auto-Elevates**: Requests Administrator / Root privileges.
 2. **Auto-Installs Dependencies**: Sets up NuGet, `powershell-yaml`, and `ImportExcel`.
 3. **Auto-Downloads Atomics**: Automatically downloads and unpacks the Atomic Red Team attack library from GitHub if not already present.
-4. **Executes Test Plan**: Runs all techniques and test numbers defined in `test_plan.json`.
-5. **Unified Results**: Produces a **single unified Excel report (`ART_Results.xlsx`)** and **JSON report (`ART_Results.json`)** in the `results\` folder.
-6. **Auto-Opens**: Automatically pops open the `results\` folder in Windows Explorer when done!
+4. **Detects Platform**: Automatically detects `windows`, `macos`, or `linux` and filters tests accordingly.
+5. **Executes Test Plan**: Runs all techniques and test numbers defined in `test_plan.json`.
+6. **Unified Results**: Produces a **single unified Excel report (`ART_Results.xlsx`)** and **JSON report (`ART_Results.json`)** in the `results/` folder.
+7. **Auto-Opens**: Automatically pops open the `results/` folder when done!
 
 ---
 

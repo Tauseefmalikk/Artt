@@ -41,21 +41,43 @@ Write-Host "  |         Fully Automated Assessment & Unified Report       |" -Fo
 Write-Host "  ============================================================" -ForegroundColor Cyan
 Write-Host ""
 
-# -- Step 1: Administrator Check --------------------------------------------
-Write-Host "[1/6] Checking Administrator privileges..." -ForegroundColor Yellow
-$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-if (-not $isAdmin) {
-    Write-Host "  [WARN] Not running as Administrator!" -ForegroundColor DarkYellow
-    Write-Host "  Requesting elevated permissions..." -ForegroundColor Yellow
+# -- Step 1: Administrator / Root Check -------------------------------------
+Write-Host "[1/6] Checking Administrator / Root privileges..." -ForegroundColor Yellow
+
+$isUnix = ($null -ne (Get-Variable -Name IsMacOS -ErrorAction SilentlyContinue) -and $IsMacOS) -or ($null -ne (Get-Variable -Name IsLinux -ErrorAction SilentlyContinue) -and $IsLinux)
+
+if ($isUnix) {
+    # Check if running as root on macOS/Linux
+    $isAdmin = $false
     try {
-        $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
-        if ($TestPlanFile) { $arguments += " -TestPlanFile `"$TestPlanFile`"" }
-        if ($NonInteractive) { $arguments += " -NonInteractive" }
-        Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments
-        exit 0
+        $isAdmin = ([System.Environment]::UserName -eq "root") -or ((id -u 2>$null) -eq 0)
     } catch {
-        Write-Error "Administrator privileges are required to simulate security attacks and inspect system events."
+        $isAdmin = ([System.Environment]::UserName -eq "root")
+    }
+
+    if (-not $isAdmin) {
+        Write-Host "  [WARN] Not running with root privileges (sudo)!" -ForegroundColor DarkYellow
+        Write-Host "  Please re-run this simulation using sudo:" -ForegroundColor Yellow
+        Write-Host "    sudo pwsh `"$PSCommandPath`"" -ForegroundColor Cyan
+        Write-Error "Root privileges (sudo) are required to simulate security attacks and inspect system events."
         exit 1
+    }
+} else {
+    # Windows Administrator Check & Auto-Elevation
+    $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if (-not $isAdmin) {
+        Write-Host "  [WARN] Not running as Administrator!" -ForegroundColor DarkYellow
+        Write-Host "  Requesting elevated permissions..." -ForegroundColor Yellow
+        try {
+            $arguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+            if ($TestPlanFile) { $arguments += " -TestPlanFile `"$TestPlanFile`"" }
+            if ($NonInteractive) { $arguments += " -NonInteractive" }
+            Start-Process powershell.exe -Verb RunAs -ArgumentList $arguments
+            exit 0
+        } catch {
+            Write-Error "Administrator privileges are required to simulate security attacks and inspect system events."
+            exit 1
+        }
     }
 }
 Write-Host "  [OK] Elevated privileges confirmed." -ForegroundColor Green
@@ -71,12 +93,13 @@ $moduleCandidates = @(
     (Join-Path $scriptRoot "..\invoke-atomicredteam"),
     (Join-Path $scriptRoot "invoke-atomicredteam"),
     (Join-Path $scriptRoot "..\..\..\invoke-atomicredteam"),
-    (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+    (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam" }),
+    (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam" }),
     "C:\AtomicRedTeam\invoke-atomicredteam"
 )
 $artModulePath = $null
 foreach ($cand in $moduleCandidates) {
-    if (Test-Path $cand) {
+    if ($cand -and (Test-Path $cand)) {
         $artModulePath = (Resolve-Path $cand).Path
         break
     }
@@ -94,7 +117,8 @@ $atomicsCandidates = @(
     (Join-Path $scriptRoot "..\atomics"),
     (Join-Path $scriptRoot "atomics"),
     (Join-Path $scriptRoot "..\..\..\atomics"),
-    (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
+    (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/atomics" }),
+    (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics" }),
     "C:\AtomicRedTeam\atomics"
 )
 $atomicsPath = $null
@@ -143,11 +167,13 @@ if (-not $TestPlanFile) {
 # -- Step 3: Install & Verify PowerShell Dependencies ------------------------
 Write-Host "[3/6] Verifying PowerShell dependencies..." -ForegroundColor Yellow
 
-# Ensure PackageProvider NuGet
-$nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
-if (-not $nuget -or $nuget.Version -lt [Version]"2.8.5.201") {
-    Write-Host "  Installing NuGet Package Provider..." -ForegroundColor Gray
-    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force | Out-Null
+if (-not $isUnix) {
+    # Ensure PackageProvider NuGet (Windows PowerShell only)
+    $nuget = Get-PackageProvider -Name NuGet -ErrorAction SilentlyContinue
+    if (-not $nuget -or $nuget.Version -lt [Version]"2.8.5.201") {
+        Write-Host "  Installing NuGet Package Provider..." -ForegroundColor Gray
+        Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force -ErrorAction SilentlyContinue | Out-Null
+    }
 }
 
 Set-PSRepository -Name PSGallery -InstallationPolicy Trusted -ErrorAction SilentlyContinue
@@ -217,8 +243,9 @@ if ($needsDownload) {
     if (-not $downloadSuccess -or -not (Test-Path $atomicsPath)) {
         Write-Host "  Downloading via direct GitHub zip archive..." -ForegroundColor Gray
         $zipUrl = "https://github.com/redcanaryco/atomic-red-team/archive/master.zip"
-        $tmpZip = Join-Path $env:TEMP "atomic-red-team-master.zip"
-        $tmpExtract = Join-Path $env:TEMP "atomic-red-team-extract-$([guid]::NewGuid().ToString('N'))"
+        $tempBase = [System.IO.Path]::GetTempPath()
+        $tmpZip = Join-Path $tempBase "atomic-red-team-master.zip"
+        $tmpExtract = Join-Path $tempBase "atomic-red-team-extract-$([guid]::NewGuid().ToString('N'))"
         
         try {
             Invoke-WebRequest -Uri $zipUrl -OutFile $tmpZip -UseBasicParsing
@@ -270,31 +297,32 @@ if (-not $TestPlanFile -or -not (Test-Path $TestPlanFile)) {
     Write-Host "  Creating default test_plan.json..." -ForegroundColor Gray
     $TestPlanFile = Join-Path $scriptRoot "..\test_plan.json"
     $defaultPlan = [ordered]@{
-        "Description"       = "Atomic Red Team - Security Assessment Execution Plan"
+        "Description"       = "Atomic Red Team - Multi-Platform Security Assessment Plan"
         "AutoCleanup"       = $true
         "DelayBetweenTests" = 10
         "SkipPrereqCheck"   = $false
+        "Platforms"         = [ordered]@{
+            "windows" = [ordered]@{
+                "T1059.003" = @(1, 2, 3)
+                "T1059.005" = @(1, 3)
+                "T1059.007" = @(1, 2)
+                "T1082"     = @(1, 2)
+                "T1016"     = @(1)
+            }
+            "macos" = [ordered]@{
+                "T1082"     = @(1, 2)
+                "T1016"     = @(1)
+                "T1033"     = @(1)
+                "T1059.002" = @(1, 2)
+                "T1059.004" = @(1, 2)
+            }
+        }
         "Tests"             = [ordered]@{
             "T1059.003" = @(1, 2, 3)
             "T1059.005" = @(1, 3)
             "T1059.007" = @(1, 2)
-            "T1218"     = @(13, 14, 15, 16)
-            "T1218.011" = @(14, 15, 16)
-            "T1105"     = @(7, 8, 15, 17, 18, 23, 26, 28, 29, 30)
-            "T1218.010" = @(3, 4, 5)
-            "T1218.007" = @(1, 2, 3, 4, 6, 7, 8, 9, 10)
-            "T1218.005" = @(1, 2, 3, 10)
-            "T1218.004" = @(1, 2, 3, 4, 5, 6, 7)
-            "T1218.001" = @(1, 8)
-            "T1547.001" = @(1, 4, 5, 7)
-            "T1546.003" = @(3)
-            "T1204.002" = @(10, 13)
-            "T1216"     = @(1, 2)
-            "T1106"     = @(2, 3, 4)
-            "T1548.002" = @(2, 3, 4, 5, 7, 9, 21, 23)
-            "T1021.006" = @(2)
-            "T1021.002" = @(2, 4)
-            "T1021.003" = @(1, 2)
+            "T1082"     = @(1, 2)
+            "T1016"     = @(1)
         }
     }
     $defaultPlan | ConvertTo-Json -Depth 5 | Out-File -FilePath $TestPlanFile -Encoding UTF8
@@ -335,9 +363,17 @@ if ($dashboardHtml) {
 Write-Host ""
 Write-Host "  Opening results folder..." -ForegroundColor Yellow
 
-# Automatically open the results folder in File Explorer for the client
+# Automatically open the results folder
 try {
-    Invoke-Item $outputDir
+    if ($isUnix) {
+        if ($null -ne (Get-Variable -Name IsMacOS -ErrorAction SilentlyContinue) -and $IsMacOS) {
+            Start-Process "open" -ArgumentList "`"$outputDir`""
+        } elseif (Get-Command xdg-open -ErrorAction SilentlyContinue) {
+            Start-Process "xdg-open" -ArgumentList "`"$outputDir`""
+        }
+    } else {
+        Invoke-Item $outputDir
+    }
 } catch {
     # Non-blocking if running headless
 }

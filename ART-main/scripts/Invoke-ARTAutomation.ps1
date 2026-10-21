@@ -118,7 +118,8 @@ if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
         (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
-        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam" }),
+        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam" }),
         "C:\AtomicRedTeam\invoke-atomicredteam"
     )
     foreach ($cand in $moduleCandidates) {
@@ -142,8 +143,9 @@ if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
         (Join-Path $PSScriptRoot "..\atomics"),
         (Join-Path $PSScriptRoot "atomics"),
         (Join-Path $PSScriptRoot "..\..\..\atomics"),
-        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
-        (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics"),
+        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/atomics" }),
+        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics" }),
+        (if ($env:USERPROFILE) { Join-Path $env:USERPROFILE "AtomicRedTeam\atomics" }),
         "C:\AtomicRedTeam\atomics"
     )
     foreach ($cand in $atomicsCandidates) {
@@ -227,6 +229,22 @@ function Get-TacticForTechnique($TechniqueId) {
     return ($matchedTactics -join ", ")
 }
 
+# -- Detect OS Platform & Host Context ---------------------------------------
+$currentPlatform = "windows"
+if ($null -ne (Get-Variable -Name IsMacOS -ErrorAction SilentlyContinue) -and $IsMacOS) {
+    $currentPlatform = "macos"
+}
+elseif ($null -ne (Get-Variable -Name IsLinux -ErrorAction SilentlyContinue) -and $IsLinux) {
+    $currentPlatform = "linux"
+}
+
+$currentHostname = if ($env:COMPUTERNAME) { $env:COMPUTERNAME } else { [System.Net.Dns]::GetHostName() }
+$currentUsername = if ($env:USERNAME) {
+    if ($env:USERDOMAIN) { "$env:USERDOMAIN\$env:USERNAME" } else { $env:USERNAME }
+} else {
+    [System.Environment]::UserName
+}
+
 # -- Parse Techniques --------------------------------------------------------
 $techniquesToRun = @()
 $planTestMap = @{}
@@ -238,7 +256,15 @@ if ($TestPlanFile -or $TestPlan) {
             exit 1
         }
         $rawPlan = Get-Content $TestPlanFile -Raw | ConvertFrom-Json
-        $testsObj = if ($rawPlan.Tests) { $rawPlan.Tests } else { $rawPlan }
+        $testsObj = $null
+        if ($rawPlan.Platforms -and $rawPlan.Platforms.PSObject.Properties[$currentPlatform]) {
+            $testsObj = $rawPlan.Platforms.$currentPlatform
+            Write-Host "  [i] Using '$currentPlatform' test plan from: $TestPlanFile" -ForegroundColor Cyan
+        } elseif ($rawPlan.Tests) {
+            $testsObj = $rawPlan.Tests
+        } else {
+            $testsObj = $rawPlan
+        }
         foreach ($prop in $testsObj.PSObject.Properties) {
             $planTestMap[$prop.Name] = @($prop.Value)
         }
@@ -323,7 +349,7 @@ $passedTests = 0
 $failedTests = 0
 $skippedTests = 0
 
-$currentPlatform = "windows"
+# ($currentPlatform, $currentHostname, and $currentUsername already resolved)
 
 # -- Import Excel module upfront if needed ------------------------------------
 if ($ExportExcel) {
@@ -346,7 +372,7 @@ else {
 $techniques = @()
 foreach ($id in $techniquesToRun) {
     try {
-        $yamlPath = Join-Path $AtomicsPath "$id\$id.yaml"
+        $yamlPath = Join-Path (Join-Path $AtomicsPath $id) "$id.yaml"
         if (Test-Path $yamlPath) {
             $techObj = Get-AtomicTechnique -Path $yamlPath
             if ($techObj) {
@@ -453,8 +479,8 @@ foreach ($technique in $techniques) {
 
         # Check platform
         $platforms = $test.supported_platforms
-        if (-not ($platforms -icontains $currentPlatform -or $platforms -icontains "windows")) {
-            Write-Host "    [SKIP] Test #${testNum} is not for $currentPlatform" -ForegroundColor DarkGray
+        if (-not ($platforms -icontains $currentPlatform)) {
+            Write-Host "    [SKIP] Test #${testNum} is not for $currentPlatform (supported: $($platforms -join ', '))" -ForegroundColor DarkGray
             $skippedTests++
             continue
         }
@@ -547,8 +573,8 @@ foreach ($technique in $techniques) {
                 CleanupStatus   = "Not Run"
                 CleanupOutput   = ""
                 PrereqsMet      = $false
-                Hostname        = $env:COMPUTERNAME
-                Username        = "$env:USERDOMAIN\$env:USERNAME"
+                Hostname        = $currentHostname
+                Username        = $currentUsername
                 Platform        = $currentPlatform
             }
             $allResults += $result
@@ -574,7 +600,8 @@ foreach ($technique in $techniques) {
         Write-Host "      Executing attack..." -ForegroundColor Yellow
 
         # FIX Bug #5: Use Start-Transcript to capture Write-Host output
-        $transcriptPath = Join-Path $env:TEMP "ART_transcript_$([guid]::NewGuid().ToString('N')).txt"
+        $tempBase = [System.IO.Path]::GetTempPath()
+        $transcriptPath = Join-Path $tempBase "ART_transcript_$([guid]::NewGuid().ToString('N')).txt"
         try {
             Start-Transcript -Path $transcriptPath -Force | Out-Null
             try {
@@ -593,7 +620,7 @@ foreach ($technique in $techniques) {
                 $rawTranscript = Get-Content $transcriptPath -Raw -ErrorAction SilentlyContinue
                 if ($rawTranscript) {
                     # Extract everything between the start header and end footer
-                    if ($rawTranscript -match '(?s)Transcript started, output file is [^\r\n]+[\r\n]+(.*?)[\r\n]+\*+\s+Windows PowerShell transcript end') {
+                    if ($rawTranscript -match '(?s)Transcript started, output file is [^\r\n]+[\r\n]+(.*?)[\r\n]+\*+\s+(?:Windows\s+)?PowerShell transcript end') {
                         $commandOutput = $Matches[1].Trim()
                     } else {
                         # Fallback if transcript format is weird
@@ -705,8 +732,8 @@ foreach ($technique in $techniques) {
             CleanupStatus   = $cleanupStatus
             CleanupOutput   = $cleanupOutput.Trim()
             PrereqsMet      = $prereqsMet
-            Hostname        = $env:COMPUTERNAME
-            Username        = "$env:USERDOMAIN\$env:USERNAME"
+            Hostname        = $currentHostname
+            Username        = $currentUsername
             Platform        = $currentPlatform
         }
 
@@ -745,8 +772,8 @@ $sessionData = @{
         StartTime          = $sessionStartTime.ToString("yyyy-MM-dd HH:mm:ss")
         EndTime            = $sessionEndTime.ToString("yyyy-MM-dd HH:mm:ss")
         DurationMinutes    = [math]::Round($sessionDuration, 2)
-        Hostname           = $env:COMPUTERNAME
-        Username           = "$env:USERDOMAIN\$env:USERNAME"
+        Hostname           = $currentHostname
+        Username           = $currentUsername
         Platform           = $currentPlatform
         TechniquesSelected = $techniques.Count
         TotalTests         = $totalTests

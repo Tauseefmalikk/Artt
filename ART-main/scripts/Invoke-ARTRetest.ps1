@@ -95,7 +95,8 @@ if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
         (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
-        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam" }),
+        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam" }),
         "C:\AtomicRedTeam\invoke-atomicredteam"
     )
     foreach ($cand in $moduleCandidates) {
@@ -119,8 +120,9 @@ if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
         (Join-Path $PSScriptRoot "..\atomics"),
         (Join-Path $PSScriptRoot "atomics"),
         (Join-Path $PSScriptRoot "..\..\..\atomics"),
-        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
-        (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics"),
+        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/atomics" }),
+        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics" }),
+        (if ($env:USERPROFILE) { Join-Path $env:USERPROFILE "AtomicRedTeam\atomics" }),
         "C:\AtomicRedTeam\atomics"
     )
     foreach ($cand in $atomicsCandidates) {

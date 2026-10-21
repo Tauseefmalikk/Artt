@@ -46,7 +46,8 @@ if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
         (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
-        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam"),
+        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam" }),
+        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam" }),
         "C:\AtomicRedTeam\invoke-atomicredteam"
     )
     foreach ($cand in $moduleCandidates) {
@@ -70,8 +71,9 @@ if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
         (Join-Path $PSScriptRoot "..\atomics"),
         (Join-Path $PSScriptRoot "atomics"),
         (Join-Path $PSScriptRoot "..\..\..\atomics"),
-        (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics"),
-        (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics"),
+        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/atomics" }),
+        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics" }),
+        (if ($env:USERPROFILE) { Join-Path $env:USERPROFILE "AtomicRedTeam\atomics" }),
         "C:\AtomicRedTeam\atomics"
     )
     foreach ($cand in $atomicsCandidates) {
@@ -198,9 +200,17 @@ if (-not (Test-Path $AtomicsPath)) {
 Write-Host "[5/5] Installing ImportExcel module..." -ForegroundColor Yellow
 
 # Ensure modules directory exists
-$modDir = Join-Path $env:USERPROFILE "Documents\WindowsPowerShell\Modules"
-if (-not (Test-Path $modDir)) {
-    New-Item -Path $modDir -ItemType Directory -Force | Out-Null
+$userHome = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+if ($userHome) {
+    $isUnix = ($null -ne (Get-Variable -Name IsMacOS -ErrorAction SilentlyContinue) -and $IsMacOS) -or ($null -ne (Get-Variable -Name IsLinux -ErrorAction SilentlyContinue) -and $IsLinux)
+    $modDir = if ($isUnix) {
+        Join-Path $userHome ".local/share/powershell/Modules"
+    } else {
+        Join-Path $userHome "Documents\WindowsPowerShell\Modules"
+    }
+    if (-not (Test-Path $modDir)) {
+        New-Item -Path $modDir -ItemType Directory -Force -ErrorAction SilentlyContinue | Out-Null
+    }
 }
 
 # Ensure NuGet provider
@@ -216,7 +226,7 @@ if ($excelModule) {
     Write-Host "  [OK] ImportExcel already installed (v$($excelModule.Version))" -ForegroundColor Green
 } else {
     Write-Host "  Installing ImportExcel (no Office required)..." -ForegroundColor Gray
-    Install-Module -Name ImportExcel -Scope AllUsers -Force -AllowClobber
+    Install-Module -Name ImportExcel -Scope CurrentUser -Force -AllowClobber
     Write-Host "  [OK] ImportExcel installed" -ForegroundColor Green
 }
 

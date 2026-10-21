@@ -31,27 +31,32 @@ ART/
 
 ## 📋 Prerequisites
 
-- **Windows VM** (target machine for attack simulation)
-- **PowerShell 5.1+** (pre-installed on Windows 10/Server 2016+)
-- **Administrator privileges** on the target VM
+- **Windows**: Windows 10/11 or Server 2016+ with PowerShell 5.1+ (Administrator)
+- **macOS / Linux**: macOS 11+ or Linux with PowerShell Core (`pwsh` 7+) (root/sudo)
+  - Install PowerShell Core on macOS: `brew install --cask powershell`
 - **Internet access** (for initial setup — downloads ART modules)
 
 ---
 
 ## ⚡ 1-Click Execution (For Clients & Automated Assessments)
 
-If you are handing this tool over to a client or non-technical operator:
+### On Windows:
+1. Double-click **`RUN_SIMULATION.bat`** in the project folder.
+2. Accept the Windows UAC Administrator prompt.
 
-1. Clone or download the repository.
-2. Double-click **`RUN_SIMULATION.bat`** in the project folder.
+### On macOS / Linux:
+1. Double-click **`run_simulation.command`** in Finder (or run `sudo ./run_simulation.sh` in Terminal).
+2. Enter your password when prompted.
+3. If PowerShell Core (`pwsh`) is not installed, the runner automatically downloads and installs it for your Mac architecture (Apple Silicon / Intel).
 
-**Everything runs automatically:**
-- Auto-elevates as Administrator.
-- Auto-installs missing dependencies (`powershell-yaml`, `ImportExcel`).
+**Everything runs automatically on both platforms:**
+- Auto-installs missing dependencies (PowerShell Core, `powershell-yaml`, `ImportExcel`).
+- Auto-checks Administrator / Root privileges.
 - Auto-downloads the `atomics` folder from GitHub if not already present.
+- Auto-detects operating system (`windows`, `macos`, `linux`) and selects matching tests from `test_plan.json`.
 - Executes tests defined in **`test_plan.json`**.
-- Saves a **single unified Excel report (`ART_Results.xlsx`)** and JSON report in the **`results\`** folder.
-- Automatically opens the `results\` folder upon completion.
+- Saves a **single unified Excel report (`ART_Results.xlsx`)** and JSON report in the **`results/`** folder.
+- Automatically opens the `results/` folder upon completion.
 
 ---
 

@@ -1,21 +1,29 @@
 {
-  "Description": "Atomic Red Team - Security Assessment Execution Plan",
+  "Description": "Atomic Red Team - Multi-Platform Security Assessment Plan",
   "AutoCleanup": true,
   "DelayBetweenTests": 10,
   "SkipPrereqCheck": false,
+  "Platforms": {
+    "windows": {
+      "T1059.003": [1, 2, 3],
+      "T1059.005": [1, 3],
+      "T1059.007": [1, 2],
+      "T1082": [1, 2],
+      "T1016": [1]
+    },
+    "macos": {
+      "T1082": [1, 2],
+      "T1016": [1],
+      "T1033": [1],
+      "T1059.002": [1, 2],
+      "T1059.004": [1, 2]
+    }
+  },
   "Tests": {
-    "T1059.003": [
-      1,
-      2,
-      3
-    ],
-    "T1059.005": [
-      1,
-      3
-    ],
-    "T1059.007": [
-      1,
-      2
-    ]
+    "T1059.003": [1, 2, 3],
+    "T1059.005": [1, 3],
+    "T1059.007": [1, 2],
+    "T1082": [1, 2],
+    "T1016": [1]
   }
 }
