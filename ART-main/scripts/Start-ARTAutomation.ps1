@@ -92,11 +92,12 @@ $moduleCandidates = @(
     (Join-Path $scriptRoot "..\..\invoke-atomicredteam"),
     (Join-Path $scriptRoot "..\invoke-atomicredteam"),
     (Join-Path $scriptRoot "invoke-atomicredteam"),
-    (Join-Path $scriptRoot "..\..\..\invoke-atomicredteam"),
-    (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam" }),
-    (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam" }),
-    "C:\AtomicRedTeam\invoke-atomicredteam"
+    (Join-Path $scriptRoot "..\..\..\invoke-atomicredteam")
 )
+if ($env:HOME) { $moduleCandidates += (Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam") }
+if ($env:HOMEDRIVE) { $moduleCandidates += (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam") }
+$moduleCandidates += "C:\AtomicRedTeam\invoke-atomicredteam"
+
 $artModulePath = $null
 foreach ($cand in $moduleCandidates) {
     if ($cand -and (Test-Path $cand)) {
@@ -116,11 +117,13 @@ $atomicsCandidates = @(
     (Join-Path $scriptRoot "..\..\atomics"),
     (Join-Path $scriptRoot "..\atomics"),
     (Join-Path $scriptRoot "atomics"),
-    (Join-Path $scriptRoot "..\..\..\atomics"),
-    (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/atomics" }),
-    (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics" }),
-    "C:\AtomicRedTeam\atomics"
+    (Join-Path $scriptRoot "..\..\..\atomics")
 )
+if ($env:HOME) { $atomicsCandidates += (Join-Path $env:HOME "AtomicRedTeam/atomics") }
+if ($env:HOMEDRIVE) { $atomicsCandidates += (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics") }
+if ($env:USERPROFILE) { $atomicsCandidates += (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics") }
+$atomicsCandidates += "C:\AtomicRedTeam\atomics"
+
 $atomicsPath = $null
 foreach ($cand in $atomicsCandidates) {
     if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {

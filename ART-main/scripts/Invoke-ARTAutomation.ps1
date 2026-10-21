@@ -117,11 +117,12 @@ if ([string]::IsNullOrWhiteSpace($ARTModulePath)) {
         (Join-Path $PSScriptRoot "..\..\invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "..\invoke-atomicredteam"),
         (Join-Path $PSScriptRoot "invoke-atomicredteam"),
-        (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam"),
-        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam" }),
-        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam" }),
-        "C:\AtomicRedTeam\invoke-atomicredteam"
+        (Join-Path $PSScriptRoot "..\..\..\invoke-atomicredteam")
     )
+    if ($env:HOME) { $moduleCandidates += (Join-Path $env:HOME "AtomicRedTeam/invoke-atomicredteam") }
+    if ($env:HOMEDRIVE) { $moduleCandidates += (Join-Path $env:HOMEDRIVE "AtomicRedTeam\invoke-atomicredteam") }
+    $moduleCandidates += "C:\AtomicRedTeam\invoke-atomicredteam"
+
     foreach ($cand in $moduleCandidates) {
         if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
             $ARTModulePath = (Resolve-Path $cand).Path
@@ -142,12 +143,13 @@ if ([string]::IsNullOrWhiteSpace($AtomicsPath)) {
         (Join-Path $PSScriptRoot "..\..\atomics"),
         (Join-Path $PSScriptRoot "..\atomics"),
         (Join-Path $PSScriptRoot "atomics"),
-        (Join-Path $PSScriptRoot "..\..\..\atomics"),
-        (if ($env:HOME) { Join-Path $env:HOME "AtomicRedTeam/atomics" }),
-        (if ($env:HOMEDRIVE) { Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics" }),
-        (if ($env:USERPROFILE) { Join-Path $env:USERPROFILE "AtomicRedTeam\atomics" }),
-        "C:\AtomicRedTeam\atomics"
+        (Join-Path $PSScriptRoot "..\..\..\atomics")
     )
+    if ($env:HOME) { $atomicsCandidates += (Join-Path $env:HOME "AtomicRedTeam/atomics") }
+    if ($env:HOMEDRIVE) { $atomicsCandidates += (Join-Path $env:HOMEDRIVE "AtomicRedTeam\atomics") }
+    if ($env:USERPROFILE) { $atomicsCandidates += (Join-Path $env:USERPROFILE "AtomicRedTeam\atomics") }
+    $atomicsCandidates += "C:\AtomicRedTeam\atomics"
+
     foreach ($cand in $atomicsCandidates) {
         if (-not [string]::IsNullOrWhiteSpace($cand) -and (Test-Path $cand)) {
             $AtomicsPath = (Resolve-Path $cand).Path
